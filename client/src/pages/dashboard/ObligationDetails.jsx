@@ -22,6 +22,7 @@ export default function ObligationDetails() {
 
     const [data, setData] = useState(null);
     const [pay, setPay] = useState('');
+    const [paymentError, setPaymentError] = useState('');
 
     const load = () =>
         obligationService
@@ -56,49 +57,68 @@ export default function ObligationDetails() {
             pay || o.remainingAmount
         );
 
-        const r = await paymentService.order({
-            obligationId: id,
-            amount,
-        });
-
-        if (r.data.mode === 'mock') {
-            await paymentService.mockSuccess(
-                r.data.paymentId
+        if (
+            amount < o.minimumPayment &&
+            amount !== o.remainingAmount
+        ) {
+            setPaymentError(
+                `Payment must be at least ₹${o.minimumPayment}.`
             );
-
-            await load();
-
-            alert(
-                'Mock payment successful. Add Razorpay keys for real checkout.'
-            );
-
             return;
         }
 
-        if (!window.Razorpay) {
-            alert(
-                'Razorpay Checkout script is not loaded.'
-            );
+        setPaymentError('');
 
-            return;
-        }
+        try {
+            const r = await paymentService.order({
+                obligationId: id,
+                amount,
+            });
 
-        const rz = new window.Razorpay({
-            key: r.data.keyId,
-            amount: r.data.amount * 100,
-            currency: 'INR',
-            order_id: r.data.orderId,
-
-            handler: async (response) => {
-                await paymentService.verify(
-                    response
+            if (r.data.mode === 'mock') {
+                await paymentService.mockSuccess(
+                    r.data.paymentId
                 );
 
-                load();
-            },
-        });
+                await load();
 
-        rz.open();
+                alert(
+                    'Mock payment successful. Add Razorpay keys for real checkout.'
+                );
+
+                return;
+            }
+
+            if (!window.Razorpay) {
+                alert(
+                    'Razorpay Checkout script is not loaded.'
+                );
+
+                return;
+            }
+
+            const rz = new window.Razorpay({
+                key: r.data.keyId,
+                amount: r.data.amount * 100,
+                currency: 'INR',
+                order_id: r.data.orderId,
+
+                handler: async (response) => {
+                    await paymentService.verify(
+                        response
+                    );
+
+                    load();
+                },
+            });
+
+            rz.open();
+        } catch (error) {
+            setPaymentError(
+                error.response?.data?.message ||
+                'Amount is greater than the remaining balance.'
+            );
+        }
     };
 
     return (
@@ -225,11 +245,10 @@ export default function ObligationDetails() {
                                     o.remainingAmount
                                 }
                                 value={pay}
-                                onChange={(e) =>
-                                    setPay(
-                                        e.target.value
-                                    )
-                                }
+                                onChange={(e) => {
+                                    setPay(e.target.value); 
+                                    setPaymentError('');
+                                }}
                             />
 
                             <button
@@ -241,6 +260,12 @@ export default function ObligationDetails() {
                                 Pay
                             </button>
                         </div>
+
+                        {paymentError && (
+                            <p className="text-sm text-red-600 mt-2">
+                                {paymentError}
+                            </p>
+                        )}
 
                         <p className="text-xs text-slate-500 mt-2">
                             Backend rules validate every

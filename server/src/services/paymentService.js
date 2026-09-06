@@ -1,9 +1,9 @@
-import crypto from 'crypto';
+import crypto from "crypto";
 
-import { razorpay } from '../config/razorpay.js';
-import Payment from '../models/Payment.js';
-import Obligation from '../models/Obligation.js';
-import { validatePayment } from '../rules/obligationRules.js';
+import { razorpay } from "../config/razorpay.js";
+import Payment from "../models/Payment.js";
+import Obligation from "../models/Obligation.js";
+import { validatePayment } from "../rules/obligationRules.js";
 
 export async function createOrder({ obligation, userId, amount }) {
     const o = await Obligation.findOne({
@@ -12,7 +12,7 @@ export async function createOrder({ obligation, userId, amount }) {
     });
 
     if (!o) {
-        throw Object.assign(new Error('Obligation not found'), {
+        throw Object.assign(new Error("Obligation not found"), {
             status: 404,
         });
     }
@@ -20,7 +20,7 @@ export async function createOrder({ obligation, userId, amount }) {
     const tx = await Payment.countDocuments({
         obligation: o._id,
         status: {
-            $in: ['CREATED', 'SUCCESSFUL'],
+            $in: ["CREATED", "SUCCESSFUL"],
         },
     });
 
@@ -32,24 +32,26 @@ export async function createOrder({ obligation, userId, amount }) {
         });
     }
 
+    // Mock payment mode when Razorpay is not configured
     if (!razorpay) {
         const p = await Payment.create({
             obligation: o._id,
             payer: userId,
             amount,
-            status: 'CREATED',
+            status: "CREATED",
         });
 
         return {
-            mode: 'mock',
+            mode: "mock",
             paymentId: p._id,
-            amount: o ? amount : 0,
+            amount,
         };
     }
 
+    // Real Razorpay order
     const order = await razorpay.orders.create({
         amount: Math.round(amount * 100),
-        currency: 'INR',
+        currency: "INR",
         receipt: `obl_${o._id}_${Date.now()}`,
         notes: {
             obligationId: String(o._id),
@@ -64,7 +66,7 @@ export async function createOrder({ obligation, userId, amount }) {
     });
 
     return {
-        mode: 'razorpay',
+        mode: "razorpay",
         keyId: process.env.RAZORPAY_KEY_ID,
         orderId: order.id,
         paymentId: p._id,
@@ -77,31 +79,61 @@ export function verifyCheckoutSignature(
     paymentId,
     signature
 ) {
+    if (!orderId || !paymentId || !signature) {
+        return false;
+    }
+
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+        return false;
+    }
+
     const expected = crypto
         .createHmac(
-            'sha256',
+            "sha256",
             process.env.RAZORPAY_KEY_SECRET
         )
         .update(`${orderId}|${paymentId}`)
-        .digest('hex');
+        .digest("hex");
+
+    const expectedBuffer = Buffer.from(expected);
+    const signatureBuffer = Buffer.from(signature);
+
+    if (expectedBuffer.length !== signatureBuffer.length) {
+        return false;
+    }
 
     return crypto.timingSafeEqual(
-        Buffer.from(expected),
-        Buffer.from(signature)
+        expectedBuffer,
+        signatureBuffer
     );
 }
 
 export function verifyWebhook(raw, signature) {
+    if (!raw || !signature) {
+        return false;
+    }
+
+    if (!process.env.RAZORPAY_WEBHOOK_SECRET) {
+        return false;
+    }
+
     const expected = crypto
         .createHmac(
-            'sha256',
+            "sha256",
             process.env.RAZORPAY_WEBHOOK_SECRET
         )
         .update(raw)
-        .digest('hex');
+        .digest("hex");
+
+    const expectedBuffer = Buffer.from(expected);
+    const signatureBuffer = Buffer.from(signature);
+
+    if (expectedBuffer.length !== signatureBuffer.length) {
+        return false;
+    }
 
     return crypto.timingSafeEqual(
-        Buffer.from(expected),
-        Buffer.from(signature)
+        expectedBuffer,
+        signatureBuffer
     );
 }
