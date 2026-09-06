@@ -1,13 +1,6 @@
-import {
-    Link,
-    useNavigate,
-} from 'react-router-dom';
+import { Link, useNavigate,} from 'react-router-dom';
 
-import {
-    LogOut,
-    Plus,
-    WalletCards,
-} from 'lucide-react';
+import {LogOut, Plus, WalletCards, } from 'lucide-react';
 
 import { useAuthStore } from '../store/authStore';
 

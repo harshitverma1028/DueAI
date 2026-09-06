@@ -120,6 +120,14 @@ export default function Home() {
                     </div>
                 ))}
             </section>
+
+
+            <section className="max-w-6xl mx-auto px-5 pb-10">
+                <footer className="border-t border-slate-800 pt-6 text-center text-sm text-slate-500">
+                    DueAI © {new Date().getFullYear()} . All rights reserved.
+                    <br />Harshit verma
+                </footer>
+            </section>
         </main>
     );
 }
